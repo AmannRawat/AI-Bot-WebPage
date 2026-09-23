@@ -10,10 +10,10 @@ export const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
 });
 
-const chromadbClient = new ChromaClient({path : 'https://localhost:8000'});
+const chromadbClient = new ChromaClient({ path: 'http://localhost:8000' });
 chromadbClient.heartbeat();
 
-const WEB_COLLECTION='WEB_SCRAPED_DATA_COLLECTION-1'
+const WEB_COLLECTION = 'WEB_SCRAPED_DATA_COLLECTION-1'
 
 
 async function scrapeWebpage(url = "") {
@@ -44,40 +44,52 @@ async function generateVectorEmbeddings({ text }) {
         contents: text,
         encoding_format: 'FLOAT',
     });
-    return response.data[0].embedding;
-}
-
-async function insertIntoDb(embeddings,documents,metadata) {
-
+    return response.embeddings[0].values;
 }
 
 async function ingest(url = '') {
-    const { head, body, internalLinks} = await scrapeWebpage(url);
-    const headEmbedding = await generateVectorEmbeddings({text: head});
+    const { head, body, internalLinks } = await scrapeWebpage(url);
+    const headEmbedding = await generateVectorEmbeddings({ text: head });
+
+    await insertIntoDb({ embedding: headEmbedding, url });
+
     const bodyChunks = chunkText(body); // Made chunks because context window size is limited for embedding content and body was lengthy
-    for(const chunk of bodyChunks){
-        const bodyEmbedding = await generateVectorEmbeddings({text: chunk});
+    for (const chunk of bodyChunks) {
+        const bodyEmbedding = await generateVectorEmbeddings({ text: chunk });
+        await insertIntoDb({ embedding: bodyEmbedding, url, body: chunk, head });
+    }
+
+    for (const link of internalLinks) {
+        const _url = `${url}${link}`;
+        await ingest(_url);
     }
 }
 
-export function chunkText(text, chunkSize = 300) {
-  const tokens = text
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ");
-
-  const chunks = [];
-
-  for (let i = 0; i < tokens.length; i += chunkSize) {
-    chunks.push(tokens.slice(i, i + chunkSize).join(" "));
-  }
-
-  return chunks;
+async function insertIntoDb({ embeddings, url, body = '', head = '' }) {
+    const collection = await chromadbClient.getOrCreateCollection({
+        name: WEB_COLLECTION,
+    });
+    await collection.add({
+        ids: [`${url}-0`],
+        embeddings: [embeddings],
+        metadatas: [{ url, body, head }]
+    });
 }
 
-scrapeWebpage("https://prepai-app.vercel.app/").then((data) => {
-    console.log(data.head);
-    console.log(data.body);
-    console.log(data.internalLinks);
-    console.log(data.externalLinks);
-});
+
+export function chunkText(text, chunkSize = 300) {
+    const tokens = text
+        .replace(/\s+/g, " ")
+        .trim()
+        .split(" ");
+
+    const chunks = [];
+
+    for (let i = 0; i < tokens.length; i += chunkSize) {
+        chunks.push(tokens.slice(i, i + chunkSize).join(" "));
+    }
+
+    return chunks;
+}
+
+ingest('https://prepai-app.vercel.app/');
