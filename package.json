@@ -1,0 +1,16 @@
+{
+  "name": "ai-bot-webpage",
+  "version": "1.0.0",
+  "description": "This is my Agentic Ai project on  web page support for learning purpose",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.20.0",
+    "cheerio": "^1.2.0"
+  }
+}
