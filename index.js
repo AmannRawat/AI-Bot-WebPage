@@ -10,10 +10,16 @@ export const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
 });
 
-const chromadbClient = new ChromaClient({ path: 'http://localhost:8000' });
+const chromadbClient = new ChromaClient({
+    host: "localhost",
+    port: 8000,
+    ssl: false,
+});
 chromadbClient.heartbeat();
 
 const WEB_COLLECTION = 'WEB_SCRAPED_DATA_COLLECTION-1'
+
+
 
 
 async function scrapeWebpage(url = "") {
@@ -44,6 +50,9 @@ async function generateVectorEmbeddings({ text }) {
         contents: text,
         encoding_format: 'FLOAT',
     });
+    // Ptinting Embedding
+    console.log("Dimension:", response.embeddings[0].values.length);
+    console.log("First 5 values:", response.embeddings[0].values.slice(0, 5));
     return response.embeddings[0].values;
 }
 
@@ -65,15 +74,17 @@ async function ingest(url = '') {
     }
 }
 
-async function insertIntoDb({ embeddings, url, body = '', head = '' }) {
+async function insertIntoDb({ embedding, url, body = '', head = '' }) {
     const collection = await chromadbClient.getOrCreateCollection({
         name: WEB_COLLECTION,
     });
     await collection.add({
         ids: [`${url}-0`],
-        embeddings: [embeddings],
+        embeddings: [embedding],
         metadatas: [{ url, body, head }]
-    });
+    })
+    const count = await collection.count();
+    console.log("Vectors in DB:", count);
 }
 
 
