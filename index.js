@@ -19,16 +19,20 @@ chromadbClient.heartbeat();
 
 const WEB_COLLECTION = 'WEB_SCRAPED_DATA_COLLECTION-1'
 
+const collection = await chromadbClient.getOrCreateCollection({
+    name: WEB_COLLECTION,
+});
 
 
 
 async function scrapeWebpage(url = "") {
+    // Static websites → Axios
     const { data } = await axios.get(url);
 
     const $ = cheerio.load(data);
 
     const pageHead = $("head").html();
-    const pageBody = $("body").html();
+    const pageBody = $("body").text().replace(/\s+/g, " ").trim();
 
     const internalLinks = [];
     const externalLinks = [];
@@ -60,12 +64,24 @@ async function ingest(url = '') {
     const { head, body, internalLinks } = await scrapeWebpage(url);
     const headEmbedding = await generateVectorEmbeddings({ text: head });
 
-    await insertIntoDb({ embedding: headEmbedding, url });
+    await insertIntoDb({
+        id: `${url}-head`,
+        embedding: headEmbedding,
+        url,
+        body: head,
+        head
+    });
 
     const bodyChunks = chunkText(body); // Made chunks because context window size is limited for embedding content and body was lengthy
-    for (const chunk of bodyChunks) {
+    for (const [chunkIndex, chunk] of bodyChunks.entries()) {
         const bodyEmbedding = await generateVectorEmbeddings({ text: chunk });
-        await insertIntoDb({ embedding: bodyEmbedding, url, body: chunk, head });
+        await insertIntoDb({
+            id: `${url}-${chunkIndex}`,
+            embedding: bodyEmbedding,
+            url,
+            body: chunk,
+            head
+        });
     }
 
     for (const link of internalLinks) {
@@ -74,15 +90,14 @@ async function ingest(url = '') {
     }
 }
 
-async function insertIntoDb({ embedding, url, body = '', head = '' }) {
-    const collection = await chromadbClient.getOrCreateCollection({
-        name: WEB_COLLECTION,
-    });
+async function insertIntoDb({ id, embedding, url, body = '', head = '' }) {
     await collection.add({
-        ids: [`${url}-0`],
+        ids: [id],
         embeddings: [embedding],
-        metadatas: [{ url, body, head }]
-    })
+        documents: [body],
+        metadatas: [{ url, head }]
+    });
+    // count the no. of vectors in the collection
     const count = await collection.count();
     console.log("Vectors in DB:", count);
 }
@@ -103,4 +118,45 @@ export function chunkText(text, chunkSize = 300) {
     return chunks;
 }
 
-ingest('https://prepai-app.vercel.app/');
+await ingest('https://prepai-app.vercel.app/');
+
+async function chat(question = '') {
+    const questionEmbedding = await generateVectorEmbeddings({ text: question });
+    const collectionResult = await collection.query({
+        queryEmbeddings: [questionEmbedding],
+        nResults: 3,
+        include: ['metadatas', 'documents']
+    })
+
+    console.log("Retrieved:", JSON.stringify(collectionResult, null, 2));
+
+    const body = collectionResult.documents[0]
+        .filter((e) => e && e.trim() !== "");
+
+    const url = collectionResult.metadatas[0]
+        .map((e) => e.url)
+        .filter((e) => e && e.trim() !== "");
+
+    const chatSession = ai.chats.create({
+        model: "gemini-3.5-flash-lite",
+        config: {
+            systemInstruction: `You are an AI support agent expert in providing support to users on behalf of the webpage. Answer the user's question only from the retrieved context.`
+        },
+        history: []
+    });
+
+    const response = await chatSession.sendMessage({
+        message: `
+    Query: ${question}
+    URLs: ${url.join(", ")}
+    Retrieved Context: ${body.join("\n\n")}
+`
+    });
+
+    console.log({
+        message: `🤖 AI Support Agent: ${response.text}`,
+        SourceURL: url[0],
+    });
+}
+
+await chat("What PrepAi App Does?");
