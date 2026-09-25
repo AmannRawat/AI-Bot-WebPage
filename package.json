@@ -10,10 +10,13 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@chroma-core/default-embed": "^0.1.9",
     "@google/genai": "^2.24.0",
     "axios": "^1.20.0",
     "cheerio": "^1.2.0",
     "chromadb": "^3.5.0",
-    "dotenv": "^18.0.3"
+    "dotenv": "^18.0.3",
+    "puppeteer": "^25.12.0",
+    "readline-sync": "^1.4.10"
   }
 }
