@@ -229,7 +229,13 @@ async function chat(question = '') {
     const chatSession = ai.chats.create({
         model: "gemini-3.5-flash-lite",
         config: {
-            systemInstruction: `You are an AI support agent expert in providing support to users on behalf of the webpage. Answer the user's question only from the retrieved context.`
+            systemInstruction: `You are an AI support agent for this website.
+                        Rules:
+                        1. Answer primarily from the retrieved context.
+                        2. If the user asks for analysis, career advice, or reasonable inference, you may infer from the context and clearly label it as "Inference".
+                        3. Never invent facts that are not supported by the context.
+                        4. Separate "Facts" from "Inference" when needed.
+                        `
         },
         history: []
     });
@@ -256,7 +262,7 @@ async function chat(question = '') {
 // await chat("Tell me about Anup who is he what does he do?");
 
 while (true) {
-    const question = readlineSync.question("\n💭 You: ");
+    const question = readlineSync.question("\n> You: ");
 
     if (question.toLowerCase() === "exit") {
         console.log("\n👋 Goodbye!");
