@@ -29,7 +29,7 @@ Coming soon....
 
 ## Architecture
 
-![Architecture](architecture.png) 
+![Architecture](Architecture.png) 
 
 ### RAG Pipeline
 
